@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "svc-wallet"
+version = "1.0.0"
+description = "Wallet microservice with FastAPI, PostgreSQL, SQLAlchemy, Alembic"
+authors = ["Your Name <your@email.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.14"
+fastapi = "^0.125.0"
+uvicorn = "^0.38.0"
+httpx = "^0.27.0"
+pydantic = "^2.8.0"
+sqlalchemy = "^2.0.0"
+psycopg = {extras = ["binary"], version = "^3.1"}
+pydantic-settings = "^2.12.0"
+
+[tool.poetry.group.dev.dependencies]
+alembic = "^1.13.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
