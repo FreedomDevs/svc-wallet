@@ -4,7 +4,7 @@ from app.responses import success_response, error_response
 from app.codes import Codes
 from app.db.models import Wallet, WalletOperation
 from app.db.session import get_db
-from app.core.utils import TraceContext
+from app.core.utils import get_timestamp
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,21 +29,22 @@ async def verify_user_exists(user_id: str) -> bool:
 
 @router.post("")
 async def create_wallet_endpoint(request: Request, payload: CreateWalletRequest, db: AsyncSession = Depends(get_db)):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    trace_id = getattr(request.state, 'trace_id', None)
     user_id = payload.userId
     if not await verify_user_exists(user_id):
         return error_response(
             status_code=404,
             message=f"User with id {user_id} not found",
-            code=Codes.USER_NOT_FOUND
+            code=Codes.USER_NOT_FOUND,
+            trace_id=trace_id
         )
     result = await db.execute(select(Wallet).where(Wallet.userId == user_id))
     if result.scalar_one_or_none():
         return error_response(
             status_code=409,
             message=f"Wallet for user {user_id} already exists",
-            code=Codes.WALLET_ALREADY_EXISTS
+            code=Codes.WALLET_ALREADY_EXISTS,
+            trace_id=trace_id
         )
     wallet_id = str(uuid4())
     wallet = Wallet(id=wallet_id, userId=user_id)
@@ -61,32 +62,35 @@ async def create_wallet_endpoint(request: Request, payload: CreateWalletRequest,
             message="Wallet successfully created",
             code=Codes.WALLET_CREATED,
             data={"id": wallet.id, "userId": wallet.userId, "balance": balance},
-            status_code=201
+            status_code=201,
+            trace_id=trace_id
         )
     except IntegrityError:
         await db.rollback()
         return error_response(
             status_code=409,
             message=f"Wallet for user {user_id} already exists",
-            code=Codes.WALLET_ALREADY_EXISTS
+            code=Codes.WALLET_ALREADY_EXISTS,
+            trace_id=trace_id
         )
     except Exception as e:
         await db.rollback()
         return error_response(
             status_code=500,
             message=f"Failed to create wallet: {str(e)}",
-            code=Codes.WALLET_INTERNAL_ERROR
+            code=Codes.WALLET_INTERNAL_ERROR,
+            trace_id=trace_id
         )
 
 @router.get("/{userId}")
 async def get_wallet_endpoint(request: Request, userId: str, db: AsyncSession = Depends(get_db)):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    trace_id = getattr(request.state, 'trace_id', None)
     if not await verify_user_exists(userId):
         return error_response(
             status_code=404,
             message=f"User with id {userId} not found",
-            code=Codes.USER_NOT_FOUND
+            code=Codes.USER_NOT_FOUND,
+            trace_id=trace_id
         )
     result = await db.execute(select(Wallet).where(Wallet.userId == userId))
     wallet = result.scalar_one_or_none()
@@ -94,7 +98,8 @@ async def get_wallet_endpoint(request: Request, userId: str, db: AsyncSession = 
         return error_response(
             status_code=404,
             message=f"Wallet for user {userId} not found",
-            code=Codes.WALLET_NOT_FOUND
+            code=Codes.WALLET_NOT_FOUND,
+            trace_id=trace_id
         )
     from sqlalchemy import func
     op_result = await db.execute(
@@ -104,13 +109,13 @@ async def get_wallet_endpoint(request: Request, userId: str, db: AsyncSession = 
     return success_response(
         message="Wallet fetched successfully",
         code=Codes.WALLET_FETCHED_OK,
-        data={"id": wallet.id, "userId": wallet.userId, "balance": balance}
+        data={"id": wallet.id, "userId": wallet.userId, "balance": balance},
+        trace_id=trace_id
     )
 
 @router.post("/{userId}/deposit")
 async def deposit_endpoint(request: Request, userId: str, payload: DepositRequest, db: AsyncSession = Depends(get_db)):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    trace_id = getattr(request.state, 'trace_id', None)
     amount = payload.amount
     external_id = payload.externalOperationId
     reason = payload.reason
@@ -118,13 +123,15 @@ async def deposit_endpoint(request: Request, userId: str, payload: DepositReques
         return error_response(
             status_code=400,
             message="Amount must be greater than 0",
-            code=Codes.INVALID_REQUEST
+            code=Codes.INVALID_REQUEST,
+            trace_id=trace_id
         )
     if not await verify_user_exists(userId):
         return error_response(
             status_code=404,
             message=f"User with id {userId} not found",
-            code=Codes.USER_NOT_FOUND
+            code=Codes.USER_NOT_FOUND,
+            trace_id=trace_id
         )
     result = await db.execute(select(Wallet).where(Wallet.userId == userId))
     wallet = result.scalar_one_or_none()
@@ -140,7 +147,8 @@ async def deposit_endpoint(request: Request, userId: str, payload: DepositReques
         return error_response(
             status_code=409,
             message="Duplicate operation",
-            code=Codes.WALLET_OPERATION_DUPLICATE
+            code=Codes.WALLET_OPERATION_DUPLICATE,
+            trace_id=trace_id
         )
     # создать операцию
     from app.core.utils import get_timestamp
@@ -165,13 +173,13 @@ async def deposit_endpoint(request: Request, userId: str, payload: DepositReques
     return success_response(
         message="Deposit successful",
         code=Codes.WALLET_DEPOSIT_OK,
-        data={"id": wallet.id, "userId": wallet.userId, "balance": balance}
+        data={"id": wallet.id, "userId": wallet.userId, "balance": balance},
+        trace_id=trace_id
     )
 
 @router.post("/{userId}/withdraw")
 async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequest, db: AsyncSession = Depends(get_db)):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    trace_id = getattr(request.state, 'trace_id', None)
     amount = payload.amount
     external_id = payload.externalOperationId
     reason = payload.reason
@@ -179,13 +187,15 @@ async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequ
         return error_response(
             status_code=400,
             message="Amount must be greater than 0",
-            code=Codes.INVALID_REQUEST
+            code=Codes.INVALID_REQUEST,
+            trace_id=trace_id
         )
     if not await verify_user_exists(userId):
         return error_response(
             status_code=404,
             message=f"User with id {userId} not found",
-            code=Codes.USER_NOT_FOUND
+            code=Codes.USER_NOT_FOUND,
+            trace_id=trace_id
         )
     result = await db.execute(select(Wallet).where(Wallet.userId == userId))
     wallet = result.scalar_one_or_none()
@@ -193,7 +203,8 @@ async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequ
         return error_response(
             status_code=404,
             message=f"Wallet for user {userId} not found",
-            code=Codes.WALLET_NOT_FOUND
+            code=Codes.WALLET_NOT_FOUND,
+            trace_id=trace_id
         )
     # идемпотентность
     op_result = await db.execute(select(WalletOperation).where(WalletOperation.externalOperationId == external_id))
@@ -201,7 +212,8 @@ async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequ
         return error_response(
             status_code=409,
             message="Duplicate operation",
-            code=Codes.WALLET_OPERATION_DUPLICATE
+            code=Codes.WALLET_OPERATION_DUPLICATE,
+            trace_id=trace_id
         )
     # пересчитать баланс через SQL SUM
     from sqlalchemy import func
@@ -213,7 +225,8 @@ async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequ
         return error_response(
             status_code=400,
             message=f"Insufficient funds. Current balance: {balance}",
-            code=Codes.WALLET_INSUFFICIENT_FUNDS
+            code=Codes.WALLET_INSUFFICIENT_FUNDS,
+            trace_id=trace_id
         )
     # создать операцию
     from app.core.utils import get_timestamp
@@ -237,18 +250,19 @@ async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequ
     return success_response(
         message="Withdrawal successful",
         code=Codes.WALLET_WITHDRAW_OK,
-        data={"id": wallet.id, "userId": wallet.userId, "balance": balance}
+        data={"id": wallet.id, "userId": wallet.userId, "balance": balance},
+        trace_id=trace_id
     )
 
 @router.delete("/{userId}")
 async def delete_wallet_endpoint(request: Request, userId: str, db: AsyncSession = Depends(get_db)):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    trace_id = getattr(request.state, 'trace_id', None)
     if not await verify_user_exists(userId):
         return error_response(
             status_code=404,
             message=f"User with id {userId} not found",
-            code=Codes.USER_NOT_FOUND
+            code=Codes.USER_NOT_FOUND,
+            trace_id=trace_id
         )
     result = await db.execute(select(Wallet).where(Wallet.userId == userId))
     wallet = result.scalar_one_or_none()
@@ -256,7 +270,8 @@ async def delete_wallet_endpoint(request: Request, userId: str, db: AsyncSession
         return error_response(
             status_code=404,
             message=f"Wallet for user {userId} not found",
-            code=Codes.WALLET_NOT_FOUND
+            code=Codes.WALLET_NOT_FOUND,
+            trace_id=trace_id
         )
     # Проверить баланс через SQL SUM
     from sqlalchemy import func
@@ -268,12 +283,14 @@ async def delete_wallet_endpoint(request: Request, userId: str, db: AsyncSession
         return error_response(
             status_code=409,
             message=f"Wallet is not empty. Current balance: {balance}",
-            code=Codes.WALLET_NOT_EMPTY
+            code=Codes.WALLET_NOT_EMPTY,
+            trace_id=trace_id
         )
     await db.delete(wallet)
     await db.commit()
     return success_response(
         message="Wallet deleted successfully",
         code=Codes.WALLET_DELETED,
-        data=None
+        data=None,
+        trace_id=trace_id
     )

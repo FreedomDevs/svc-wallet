@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Request, Depends
 from app.responses import success_response
 from app.codes import Codes
-from app.core.utils import TraceContext
 from app.db.session import get_db
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,18 +10,19 @@ router = APIRouter(tags=["system"])
 
 @router.get("/live")
 async def get_live(request: Request):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    # TraceID теперь устанавливается через middleware
+    trace_id = getattr(request.state, 'trace_id', None)
     return success_response(
         data={"alive": True},
         code=Codes.LIVE_OK,
-        message="svc-wallet жив"
+        message="svc-wallet жив",
+        trace_id=trace_id
     )
 
 @router.get("/health")
 async def get_health(request: Request, db: AsyncSession = Depends(get_db)):
-    trace_id = request.headers.get("X-Trace-Id")
-    TraceContext.set_trace_id(trace_id)
+    # TraceID теперь устанавливается через middleware
+    trace_id = getattr(request.state, 'trace_id', None)
     database_status = "OK"
     dependencies = {}
     overall_status = "UP"
@@ -51,5 +51,6 @@ async def get_health(request: Request, db: AsyncSession = Depends(get_db)):
             "dependencies": dependencies
         },
         code=Codes.HEALTH_OK,
-        message="Сервис работает" if overall_status == "UP" else "Сервис имеет проблемы"
+        message="Сервис работает" if overall_status == "UP" else "Сервис имеет проблемы",
+        trace_id=trace_id
     )
