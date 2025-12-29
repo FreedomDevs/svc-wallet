@@ -1,5 +1,5 @@
 from app.repository.wallet_repository import WalletRepository
-from app.db.models import WalletOperation
+from app.db.models import WalletOperation, WalletOperationType
 from app.codes import Codes
 from uuid import uuid4
 from app.core.utils import get_timestamp
@@ -42,7 +42,7 @@ class WalletService:
             id=str(uuid4()),
             walletId=wallet.id,
             amount=amount,
-            type="DEPOSIT",
+            type=WalletOperationType.DEPOSIT.value,
             reason=reason,
             externalOperationId=external_id,
             traceId=trace_id or "",
@@ -69,7 +69,7 @@ class WalletService:
             id=str(uuid4()),
             walletId=wallet.id,
             amount=-amount,
-            type="WITHDRAW",
+            type=WalletOperationType.WITHDRAW.value,
             reason=reason,
             externalOperationId=external_id,
             traceId=trace_id or "",
