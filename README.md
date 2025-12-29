@@ -1,55 +1,39 @@
+
 # svc-wallet
 
 Микросервис управления кошельками пользователей. Предоставляет CRUD операции для работы с кошельками, включая пополнение, списание и получение информации о балансе.
 
-## Особенности
-
-- ✅ REST API на FastAPI
-- ✅ Полная поддержка API Guidelines (стандарт ответов/ошибок)
-- ✅ TraceId для отслеживания запросов
-- ✅ Проверка существования пользователей через svc-users
-- ✅ Автоматическое создание кошелька при необходимости
-- ✅ Health, Ready, Live, Metrics эндпоинты
-- ✅ SQLite база данных
-
-## Установка
+## Быстрый старт (Docker)
 
 ### Требования
-- Python 3.8 или выше
-- pip
+- Docker и Docker Compose
+
+### Запуск
+
+```bash
+git clone <repo-url>
+cd svc-wallet
+docker compose up --build
+```
+
+API будет доступен на `http://localhost:9006`
+
+---
+
+## Локальная разработка (Poetry)
+
+### Требования
+- Python 3.10+
+- Poetry
 
 ### Шаги
-
-1. **Клонировать репозиторий**
 ```bash
-cd d:\Projects\svc-wallet
+git clone <repo-url>
+cd svc-wallet
+poetry install
+poetry run alembic upgrade head
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 9006 --reload
 ```
-
-2. **Создать виртуальное окружение**
-
-На Linux/Mac:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-На Windows:
-```bash
-python3 -m venv .venv
-.venv\Scripts\activate.bat
-```
-
-3. **Установить зависимости**
-```bash
-pip install -r requirements.txt
-```
-
-4. **Запустить сервис**
-```bash
-python main.py
-```
-
-Сервис запустится на `http://127.0.0.1:9006`
 
 ## API Эндпоинты
 
@@ -64,9 +48,7 @@ python main.py
 ### Системные эндпоинты
 
 - **GET** `/health` — Проверка здоровья сервиса
-- **GET** `/ready` — Проверка готовности к трафику
 - **GET** `/live` — Проверка живого процесса
-- **GET** `/metrics` — Метрики сервиса
 
 ## Примеры использования
 
@@ -124,23 +106,25 @@ curl -X GET http://127.0.0.1:9006/wallets/550e8400-e29b-41d4-a716-446655440000
 curl -X GET http://127.0.0.1:9006/health
 ```
 
+
 ## Структура проекта
 
 ```
 svc-wallet/
-├── main.py                 # Entry point приложения
-├── codes.py               # Enum коды ошибок и успеха
-├── responses.py           # Форматирование ответов
-├── database.py            # Работа с БД (SQLite)
-├── utils.py               # Утилиты (TraceId, timestamp)
-├── requirements.txt       # Python зависимости
-├── docker-compose.yml     # Docker конфигурация
-├── routes/
-│   ├── __init__.py       # Подключение роутеров
-│   ├── health.py         # Системные эндпоинты
-│   └── wallets.py        # CRUD эндпоинты для кошельков
-├── README.md             # Этот файл
-└── API.md                # Полная документация API
+├── app/
+│   ├── main.py           # Точка входа FastAPI
+│   ├── codes.py          # Коды ошибок и успеха
+│   ├── responses.py      # Форматирование ответов
+│   ├── api/              # Эндпоинты (wallets, health)
+│   ├── core/             # Конфиг, middleware, utils
+│   ├── db/               # Модели, сессии, база
+│   ├── repository/       # Репозитории
+│   └── service/          # Бизнес-логика
+├── alembic/              # Миграции БД
+├── docker-compose.yml    # Docker конфиг
+├── Dockerfile            # Dockerfile
+├── pyproject.toml        # Poetry зависимости
+└── README.md             # Этот файл
 ```
 
 ## Стандарт ответов
@@ -200,32 +184,12 @@ curl -H "X-Trace-Id: your-trace-id" http://127.0.0.1:9006/health
 
 Если заголовок не передан, сервис генерирует новый.
 
-## Зависимости
 
-- **fastapi** (^0.125.0) — веб-фреймворк
-- **uvicorn** (^0.38.0) — ASGI сервер
-- **httpx** (^0.27.0) — HTTP клиент
-- **pydantic** (^2.8.0) — валидация данных
-
-## Разработка
-
-### Для добавления нового эндпоинта
-
-1. Добавить код в `codes.py`
-2. Создать функцию в `routes/wallets.py`
-3. Использовать `success_response()` и `error_response()`
-
-### Для изменения БД
-
-1. Отредактировать функции в `database.py`
-2. При необходимости пересоздать БД
-
-## Docker
-
-```bash
-docker-compose up
-```
-
-## Контакты
-
-Для вопросов обратитесь к разработчику микросервиса.
+## Зависимости (основные)
+- fastapi
+- uvicorn
+- httpx
+- pydantic
+- sqlalchemy
+- psycopg (PostgreSQL)
+- alembic (dev)
