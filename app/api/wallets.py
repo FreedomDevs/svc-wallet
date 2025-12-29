@@ -17,6 +17,11 @@ router = APIRouter(prefix="/wallets", tags=["wallets"])
 
 
 async def verify_user_exists(user_id: str) -> bool:
+    """
+    Проверяет существование пользователя по user_id через внешний сервис пользователей.
+    Возвращает True, если пользователь найден, иначе False.
+    Логирует ошибку при сбое запроса.
+    """
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{settings.SVC_USERS_URL}/users/{user_id}", timeout=5.0)
@@ -30,6 +35,9 @@ async def verify_user_exists(user_id: str) -> bool:
 
 @router.post("")
 async def create_wallet_endpoint(request: Request, payload: CreateWalletRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Создать кошелёк для пользователя. Возвращает ошибку, если пользователь не найден или кошелёк уже существует.
+    """
     trace_id = getattr(request.state, 'trace_id', None)
     repository = WalletRepository(db)
     service = WalletService(repository, verify_user_exists)
@@ -45,6 +53,10 @@ async def create_wallet_endpoint(request: Request, payload: CreateWalletRequest,
 
 @router.get("/{userId}")
 async def get_wallet_endpoint(request: Request, userId: str, db: AsyncSession = Depends(get_db)):
+    """
+    Получить информацию о кошельке пользователя по userId.
+    Возвращает ошибку, если пользователь или кошелёк не найден.
+    """
     trace_id = getattr(request.state, 'trace_id', None)
     repository = WalletRepository(db)
     service = WalletService(repository, verify_user_exists)
@@ -58,6 +70,10 @@ async def get_wallet_endpoint(request: Request, userId: str, db: AsyncSession = 
 
 @router.post("/{userId}/deposit")
 async def deposit_endpoint(request: Request, userId: str, payload: DepositRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Пополнить баланс кошелька пользователя.
+    Проверяет корректность суммы, существование пользователя и дублирование операции.
+    """
     trace_id = getattr(request.state, 'trace_id', None)
     repository = WalletRepository(db)
     service = WalletService(repository, verify_user_exists)
@@ -73,6 +89,10 @@ async def deposit_endpoint(request: Request, userId: str, payload: DepositReques
 
 @router.post("/{userId}/withdraw")
 async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Снять средства с кошелька пользователя.
+    Проверяет корректность суммы, наличие средств, дублирование операции и существование пользователя.
+    """
     trace_id = getattr(request.state, 'trace_id', None)
     repository = WalletRepository(db)
     service = WalletService(repository, verify_user_exists)
@@ -92,6 +112,9 @@ async def withdraw_endpoint(request: Request, userId: str, payload: WithdrawRequ
 
 @router.delete("/{userId}")
 async def delete_wallet_endpoint(request: Request, userId: str, db: AsyncSession = Depends(get_db)):
+    """
+    Удалить кошелёк пользователя. Возвращает ошибку, если кошелёк не найден или не пустой.
+    """
     trace_id = getattr(request.state, 'trace_id', None)
     repository = WalletRepository(db)
     service = WalletService(repository, verify_user_exists)
