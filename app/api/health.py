@@ -27,11 +27,12 @@ async def get_health(request: Request, db: AsyncSession = Depends(get_db)):
     dependencies = {}
     overall_status = "UP"
     # Check database
+    import sqlalchemy.exc
     try:
         if db:
             await db.execute("SELECT 1")
         database_status = "OK"
-    except Exception:
+    except (sqlalchemy.exc.SQLAlchemyError, AttributeError):
         database_status = "DOWN"
         overall_status = "DOWN"
     # Check svc-users dependency
@@ -41,7 +42,7 @@ async def get_health(request: Request, db: AsyncSession = Depends(get_db)):
             dependencies["svc-users"] = "OK" if response.status_code == 200 else "DOWN"
             if response.status_code != 200:
                 overall_status = "DOWN"
-    except Exception:
+    except (httpx.RequestError, httpx.TimeoutException):
         dependencies["svc-users"] = "DOWN"
         overall_status = "DOWN"
     return success_response(

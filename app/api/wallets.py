@@ -1,3 +1,5 @@
+import logging
+from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Depends
 from typing import Optional
 from app.responses import success_response, error_response
@@ -19,7 +21,10 @@ async def verify_user_exists(user_id: str) -> bool:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{settings.SVC_USERS_URL}/users/{user_id}", timeout=5.0)
             return response.status_code == 200
-    except Exception:
+    except (httpx.RequestError, httpx.TimeoutException, httpx.ConnectError) as exc:
+        logging.exception(
+            f"[{datetime.utcnow().isoformat()}] Error verifying user existence: user_id={user_id}, endpoint={endpoint}, trace_id={trace_id}, exc={str(exc)}"
+        )
         return False
 
 
