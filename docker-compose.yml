@@ -19,5 +19,13 @@ services:
       - "9006:9006"
     depends_on:
       - db
+      - redis
+
+  redis:
+    image: redis:7
+    restart: always
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
 volumes:
   pgdata:

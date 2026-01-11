@@ -2,7 +2,11 @@ from app.repository.wallet_repository import WalletRepository
 from app.db.models import WalletOperation, WalletOperationType
 from app.codes import Codes
 from uuid import uuid4
+
 from app.core.utils import get_timestamp
+from app.core.redis import redis_client
+from app.core.config import settings
+
 
 class WalletService:
     """
@@ -16,6 +20,35 @@ class WalletService:
         """
         self.repository = repository
         self.verify_user_exists = verify_user_exists
+
+    async def _get_balance_cache_key(self, user_id: str) -> str:
+        return f"wallet_balance:{user_id}"
+
+    async def _get_balance_from_cache(self, user_id: str):
+        redis = await redis_client.get_redis()
+        key = await self._get_balance_cache_key(user_id)
+        value = await redis.get(key)
+        return int(value) if value is not None else None
+
+    async def _set_balance_cache(self, user_id: str, balance: int, ttl: int = None):
+        redis = await redis_client.get_redis()
+        key = await self._get_balance_cache_key(user_id)
+        if ttl is None:
+            ttl = settings.REDIS_BALANCE_TTL
+        await redis.set(key, balance, ex=ttl)
+
+    async def _incr_balance_cache(self, user_id: str, amount: int):
+        redis = await redis_client.get_redis()
+        key = await self._get_balance_cache_key(user_id)
+        # Get current TTL
+        ttl = await redis.ttl(key)
+        # If key exists, increment and preserve TTL
+        if ttl > 0:
+            await redis.incrby(key, amount)
+            await redis.expire(key, ttl)
+        else:
+            # If not exists, do not set TTL here (should be set on full recalculation)
+            pass
 
     async def create_wallet(self, user_id: str):
         """
@@ -41,7 +74,13 @@ class WalletService:
         wallet = await self.repository.get_wallet_by_user_id(user_id)
         if not wallet:
             return None, Codes.WALLET_NOT_FOUND
+        # Пробуем получить баланс из кеша
+        balance = await self._get_balance_from_cache(user_id)
+        if balance is not None:
+            return {"id": wallet.id, "userId": wallet.userId, "balance": balance}, Codes.WALLET_FETCHED_OK
+        # Если нет в кеше — пересчитываем, возвращаем и кладём в кеш
         balance = await self.repository.get_balance(wallet.id)
+        await self._set_balance_cache(user_id, balance)
         return {"id": wallet.id, "userId": wallet.userId, "balance": balance}, Codes.WALLET_FETCHED_OK
 
     async def deposit(self, user_id: str, amount: int, external_id: str, reason: str, trace_id: str):
@@ -70,6 +109,8 @@ class WalletService:
             createdAt=get_timestamp()
         )
         await self.repository.add_operation(operation)
+        # Инкрементируем кеш баланса, TTL не сбрасываем
+        await self._incr_balance_cache(user_id, amount)
         balance = await self.repository.get_balance(wallet.id)
         return {"id": wallet.id, "userId": wallet.userId, "balance": balance}, Codes.WALLET_DEPOSIT_OK
 
@@ -101,6 +142,8 @@ class WalletService:
             createdAt=get_timestamp()
         )
         await self.repository.add_operation(operation)
+        # Декрементируем кеш баланса, TTL не сбрасываем
+        await self._incr_balance_cache(user_id, -amount)
         balance = await self.repository.get_balance(wallet.id)
         return {"id": wallet.id, "userId": wallet.userId, "balance": balance}, Codes.WALLET_WITHDRAW_OK
 
